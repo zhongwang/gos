@@ -5,7 +5,7 @@ from transformers import AutoModel, AutoTokenizer
 
 DEFAULT_MODEL = "DOEJGI/GenomeOcean-Sentinel"
 # Pinned to the published weights, tokenizer, and custom modeling code.
-DEFAULT_MODEL_REVISION = "0d91aff1293ad48e71335a6963316a2062c090d5"
+DEFAULT_MODEL_REVISION = "7ad672818571cb63f7646539d60414e2d271b90b"
 
 
 class GenomeOceanStudent:
