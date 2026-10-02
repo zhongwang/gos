@@ -1,0 +1,54 @@
+{
+  "description": "Deterministic random sample (seed 42) of held-out GOS v4 test records, for the runnable example.",
+  "seed": 42,
+  "records": [
+    {
+      "id": "record_1",
+      "source": "harvardforest_test_008.fa",
+      "generator": "ood_natural",
+      "true_label": 0,
+      "length": 1395,
+      "header": "harvardforest_test_008_014"
+    },
+    {
+      "id": "record_2",
+      "source": "gtdb_25k_test_003.fa",
+      "generator": "ood_natural",
+      "true_label": 0,
+      "length": 5000,
+      "header": "gtdb_25k_test_003_015"
+    },
+    {
+      "id": "record_3",
+      "source": "go_500m_test_004.fa",
+      "generator": "GenomeOcean-500M",
+      "true_label": 1,
+      "length": 1065,
+      "header": "go_500m_test_004_015"
+    },
+    {
+      "id": "record_4",
+      "source": "go_100m_test_003.fa",
+      "generator": "GenomeOcean-100M",
+      "true_label": 1,
+      "length": 1080,
+      "header": "go_100m_test_003_000"
+    },
+    {
+      "id": "record_5",
+      "source": "generator_v2_test_000.fa",
+      "generator": "GENERATOR-v2",
+      "true_label": 1,
+      "length": 3072,
+      "header": "generator_v2_test_000_022"
+    },
+    {
+      "id": "record_6",
+      "source": "evo1_test_000.fa",
+      "generator": "Evo-1",
+      "true_label": 1,
+      "length": 2501,
+      "header": "evo1_test_000_018"
+    }
+  ]
+}

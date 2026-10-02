@@ -1,0 +1,91 @@
+{
+  "description": "Example output from running `python -m src.v4.detect` on examples/example.fasta (GOS v4 CPU checkpoint). The detector ran locally; no synthetic numbers.",
+  "checkpoint": "gos_v4_cpu",
+  "command": "python -m src.v4.detect --input examples/example.fasta --model-dir <checkpoint-dir> --format json",
+  "records": [
+    {
+      "id": "record_1",
+      "length": 1395,
+      "prediction": null,
+      "label": "inconclusive",
+      "reason": "insufficient_sequence_score_coverage",
+      "router_confidence": 0.136579,
+      "sequence_score_coverage": 0.7168,
+      "sequence_mean": 0.136,
+      "cds_max": null,
+      "multiscale_available": 1.0,
+      "pav_triggered": true,
+      "pav_status": "unavailable"
+    },
+    {
+      "id": "record_2",
+      "length": 5000,
+      "prediction": 0,
+      "label": "natural",
+      "reason": "router_natural",
+      "router_confidence": 0.071007,
+      "sequence_score_coverage": 1.0,
+      "sequence_mean": 0.4044,
+      "cds_max": 0.2973,
+      "multiscale_available": 1.0,
+      "pav_triggered": false,
+      "pav_status": "not_requested"
+    },
+    {
+      "id": "record_3",
+      "length": 861,
+      "prediction": 1,
+      "label": "AI",
+      "reason": "router_ai",
+      "router_confidence": 0.929981,
+      "sequence_score_coverage": 1.0,
+      "sequence_mean": 0.9996,
+      "cds_max": null,
+      "multiscale_available": 1.0,
+      "pav_triggered": false,
+      "pav_status": "not_requested"
+    },
+    {
+      "id": "record_4",
+      "length": 878,
+      "prediction": 1,
+      "label": "AI",
+      "reason": "router_ai",
+      "router_confidence": 0.926037,
+      "sequence_score_coverage": 1.0,
+      "sequence_mean": 0.989,
+      "cds_max": null,
+      "multiscale_available": 1.0,
+      "pav_triggered": false,
+      "pav_status": "not_requested"
+    },
+    {
+      "id": "record_5",
+      "length": 3072,
+      "prediction": 1,
+      "label": "AI",
+      "reason": "router_ai",
+      "router_confidence": 0.92353,
+      "sequence_score_coverage": 0.9766,
+      "sequence_mean": 0.9997,
+      "cds_max": 0.9992,
+      "multiscale_available": 1.0,
+      "pav_triggered": false,
+      "pav_status": "not_requested"
+    },
+    {
+      "id": "record_6",
+      "length": 2501,
+      "prediction": 1,
+      "label": "AI",
+      "reason": "router_ai",
+      "router_confidence": 0.947553,
+      "sequence_score_coverage": 1.0,
+      "sequence_mean": 0.6794,
+      "cds_max": 0.9999,
+      "multiscale_available": 1.0,
+      "pav_triggered": false,
+      "pav_status": "not_requested"
+    }
+  ]
+}
