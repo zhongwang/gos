@@ -1,95 +1,113 @@
-# GenomeOcean-Sentinel (GOS)
+# GOS
 
-GenomeOcean-Sentinel (GOS) is a high-throughput detector for AI-generated and
-synthetic DNA sequences. It uses a frozen biological language model as an
-observer and measures the **positional attention variance (pAV)** of a sequence.
-AI-generated DNA shows a characteristic flattening of pAV relative to evolved
-(natural) sequences, which GOS exploits to flag synthetic sequences with high
-sensitivity and low false-positive rates.
-
-This repository contains the GOS **v4 detector** source, an example, and the
-documentation needed to run it. Trained model checkpoints are published
-separately (see [Models](#models)).
-
-## License
-
-GenomeOcean-Sentinel (GOS) is licensed under the
-[Lawrence Berkeley National Laboratory Non-Commercial Use Only License](LICENSE).
-Copyright (c) 2026, The Regents of the University of California, through Lawrence
-Berkeley National Laboratory ("Berkeley Lab"), subject to receipt of any required
-approvals from the U.S. Dept. of Energy. All rights reserved. Redistribution and
-use are permitted only for **non-commercial** purposes under the conditions in
-[LICENSE](LICENSE). A separate commercial use license is available from Berkeley
-Lab at IPO@lbl.gov. See [NOTICE](NOTICE) for the DOE contract attribution.
-
-## Installation
-
-```bash
-pip install -r requirements.txt
-```
-
-Runtime dependencies: `numpy`, `scikit-learn`, `joblib`, `torch`, `transformers`.
+GenomeOcean-Sentinel (GOS) classifies FASTA records as `AI` or `Natural` using
+47 multiscale CPU features and a **distilled GenomeOcean-100M v1.2 student
+observer**. The trained student checkpoint and production decision weights
+ship in [models/gos_detector/](models/gos_detector/). Sequences are treated as
+input strings; this package performs inference only.
 
 ## Quickstart
 
-The v4 detector scans FASTA records and writes a JSON or TSV projection:
+Use Python 3.10 or newer, Git LFS, and a Python environment with the runtime
+dependencies. Run from the repository root:
 
 ```bash
-python -m src.v4.detect \
+git lfs pull
+python -m pip install -r requirements.txt
+
+# Download the exact base snapshot once; subsequent inference is local-only.
+MODEL=$(python -c 'from huggingface_hub import snapshot_download; print(snapshot_download("DOEJGI/GenomeOcean-100M-v1.2", revision="2326d7b3d02476cb014a768e9f2de617007385ab"))')
+
+python -m src \
   --input examples/example.fasta \
-  --model-dir /path/to/checkpoint \
-  --format json \
-  --out results.json
+  --model "$MODEL" \
+  --checkpoint models/gos_detector/gos_detector_distilled_genomeocean_100m.pt \
+  --output examples/example_output.json \
+  --device cpu --dtype float32
 ```
 
-Each record is labelled `AI`, `natural`, or `inconclusive`.
+`--model` accepts an existing local snapshot directory, so downloading is
+unnecessary if that revision is already available. Inference loads the base
+architecture and tokenizer, then strictly loads all shipped student weights.
+The checkpoint's embedded training path is never used to locate the model.
+`--decision-head` optionally selects a decision JSON; the default is
+`decision_head.json` beside the checkpoint. `--batch-size` defaults to 16.
+For the production precision mode, use `--device cuda --dtype bfloat16`.
+CPU float32 is the portable default; device, precision, and dependency versions
+are recorded in output and can affect numerical scores slightly.
 
-### Getting a checkpoint
+## Decision rule
 
-The **production GOS v4 detector** ships in this repository at
-`models/gos_detector/gos_detector_distilled_genomeocean_100m.pt` (Git LFS). It
-is a distilled **GenomeOcean-100M v1.2** student observer (116M params,
-saturation epoch 6) that replaces the larger NT-2.5B teacher, so the detector
-runs at high throughput. The checkpoint is a `torch` `state_dict` recording the
-student weights and the detector's calibration scalars (`target_mean`,
-`target_std`, `max_length=200`).
+The CPU extractor preserves the production 500-character windows, 250-character
+stride, terminal-window inclusion, and 47-feature ordering. It casts features
+to float32 before the decision head standardizes them in float64. The original
+3248-feature coefficient vector places this block at **index 3201**, beginning
+with `multiscale_available`; `multiscale_mean_dimer_entropy` is at index 3207.
+The shipped JSON contains exactly the required slices and availability scalar:
 
-Because it is a distilled student, loading it also needs the base
-**GenomeOcean-100M v1.2** weights (the `GenomeOceanStudent` architecture) —
-available on Hugging Face as [`DOEJGI/GenomeOcean-100M-v1.2`](https://huggingface.co/DOEJGI/GenomeOcean-100M-v1.2).
-
-> **Note:** the current `src/v4` CLI and the saved joblib bundles in this tree were
-> built with the NT-2.5B observer. The GenomeOcean-100M distilled student is the
-> production observer; see [models/gos_detector/README.md](models/gos_detector/README.md)
-> for how to compose a detector from it.
-
-To run the `src/v4` CLI against a saved full checkpoint directory:
-
-```bash
-python -m src.v4.detect \
-  --input examples/example.fasta \
-  --model-dir /path/to/checkpoint \
-  --format json
+```text
+base_logit = intercept + ((1 - mean[0]) / scale[0]) * coef[0]
+             + ((cpu_features - mean[3201:]) / scale[3201:]) @ coef[3201:]
+observer_logit = student_head(mask_mean(backbone_hidden)) * target_std + target_mean
+total_logit = base_logit + observer_logit
+router_confidence = sigmoid(total_logit)
+call = AI if total_logit >= threshold_logit else Natural
 ```
+
+The observer uses a Linear(768, 1) head, `[PAD]` padding, and truncation to
+**200 tokens**. CPU features cover all eligible fragments; the observer sees
+the truncated tokenized record.
+
+The default threshold is **−4.535912535032772** in logit space
+(probability **0.01060348416857509**). It was derived with the production
+`threshold_at_fpr` procedure from the stored `global_probability` and `labels`
+arrays, targeting FPR 0.05: 100 of 2000 natural reference records meet the
+inclusive threshold. This reuses the existing production reference calibration;
+it is **not an independent FPR certification for the student or new datasets**.
+See [model documentation](models/gos_detector/README.md) for provenance.
+
+`router_confidence` is the AI score even when the call is `Natural`; it is not
+the probability that the selected label is correct. Calls use the calibrated
+threshold, not 0.5. The package implements the specified binary decision path;
+it does not add a fallback service or an inconclusive routing stage.
+
+## Inputs and output
+
+The FASTA reader removes formatting whitespace and uppercases record strings.
+CPU preprocessing splits on characters outside its supported four-character
+alphabet and excludes fragments shorter than 500 characters. Records without
+an eligible fragment cause an explicit error; no score is invented. Empty
+records, duplicate IDs, invalid labels, and non-finite scores are rejected.
+
+A header may contain `true_label=0` (Natural) or `true_label=1` (AI). Labels
+are copied to output solely for evaluation and never affect inference; absent
+labels produce `true_label: null`. Each output record includes `call`, numeric
+`prediction`, `router_confidence`, `reason`, and the component logits.
+[The example](examples/README.md) includes labels verified against the source
+manifest and actual output from this CLI.
 
 ## Python API
 
 ```python
-from src.v4 import GOSV4Detector
+from src.gos import GOSDetector
 
-# Instantiate from a saved checkpoint directory.
-detector = GOSV4Detector.from_checkpoint("/path/to/checkpoint")
-result = detector.scan("ATGCTAGCTAGCTAGCTAGCTAGCTAGC...", source_id="seq1")
-print(result.prediction)  # 'AI' | 'natural' | 'inconclusive'
+detector = GOSDetector(
+    model="/path/to/local/GenomeOcean-100M-v1.2/snapshot",
+    checkpoint="models/gos_detector/gos_detector_distilled_genomeocean_100m.pt",
+)
+result = detector.scan(sequence)  # your input string
+print(result["call"], result["router_confidence"])
 ```
 
-## Repository layout
+## Layout and license
 
-```
-src/v4/            GOS v4 detector source (GOSV4Detector + CLI)
-examples/          Example FASTA input and usage notes
-LICENSE            Berkeley Lab Non-Commercial Use Only License
-NOTICE             DOE contract attribution
-```
+- `src/gos/`: student, CPU features, decision head, detector, and CLI.
+- `models/gos_detector/`: existing LFS checkpoint and small decision-weight JSON.
+- `examples/`: FASTA, verified label manifest, and real inference output.
 
-See [examples/README.md](examples/README.md) for a worked example.
+GOS uses the [Lawrence Berkeley National Laboratory Non-Commercial Use Only
+License](LICENSE). Copyright (c) 2026, The Regents of the University of
+California, through Lawrence Berkeley National Laboratory. See [NOTICE](NOTICE)
+for DOE contract attribution and [LICENSE](LICENSE) for the full terms and
+commercial licensing contact. The separately downloaded base model is
+[DOEJGI/GenomeOcean-100M-v1.2](https://huggingface.co/DOEJGI/GenomeOcean-100M-v1.2).

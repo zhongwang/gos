@@ -1,68 +1,40 @@
-# Public repo: track only the GOS scanner source + docs + example.
-# Everything else stays on disk in the local working dir (for paper reproduction).
+# Public release allowlist. Working data, history, backups, and tools stay local.
+/*
+!/.gitattributes
+!/.gitignore
+!/LICENSE
+!/NOTICE
+!/README.md
+!/requirements.txt
+!/src/
+!/examples/
+!/models/
 
-# Heavy working data / results / history — NEVER public
-/data/
-/results/
-/logs/
-/paper_build/
-/historical/
-/models_archive/
-/paper/
-/figures/
-/scripts/
-/tasks/
-/tests/
-/docs/
-/DATA_README.md
-/PIPELINE_README.md
+/src/*
+!/src/__init__.py
+!/src/__main__.py
+!/src/gos/
+/src/gos/*
+!/src/gos/*.py
 
-# Legacy pipeline versions — not the public scanner
+# Retired source trees are never published.
 /src/v1/
 /src/v2/
 /src/v3/
+/src/v4/
 
-# Model checkpoints — only the published GOS detector is tracked (LFS).
-# Ignore contents of models/ but re-include the published detector subdir.
+/examples/*
+!/examples/README.md
+!/examples/example.fasta
+!/examples/example_manifest.json
+!/examples/example_output.json
+
 /models/*
-*.pth
-*.pt
-*.ckpt
-*.safetensors
-*.onnx
-*.h5
-*.hdf5
-*.pkl
-*.joblib
 !/models/gos_detector/
-!/models/gos_detector/*.pt
+/models/gos_detector/*
+!/models/gos_detector/README.md
+!/models/gos_detector/decision_head.json
+!/models/gos_detector/gos_detector_distilled_genomeocean_100m.pt
 
-# Secrets / env — keep only the placeholder example
-.env
-.env.*
-!.env.example
-/.env.example
-
-# Tooling / build cruft
-.venv/
-.claude/
-.vscode/
-.pytest_cache/
 __pycache__/
 *.py[cod]
-
-# Manuscript build products
-*.aux
-*.bbl
-*.blg
-*.log
-*.out
-
-# Workflow transcripts
-*rosaline*
-*rosline*
-*gpt-astra*
-*gpt_astra*
-
-# Local-only history backup of the pre-consolidation repo (never push)
-/.git.preconsolidation-backup/

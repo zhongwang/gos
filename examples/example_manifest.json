@@ -23,7 +23,7 @@
       "source": "go_500m_test_004.fa",
       "generator": "GenomeOcean-500M",
       "true_label": 1,
-      "length": 1065,
+      "length": 861,
       "header": "go_500m_test_004_015"
     },
     {
@@ -31,7 +31,7 @@
       "source": "go_100m_test_003.fa",
       "generator": "GenomeOcean-100M",
       "true_label": 1,
-      "length": 1080,
+      "length": 878,
       "header": "go_100m_test_003_000"
     },
     {
@@ -50,5 +50,6 @@
       "length": 2501,
       "header": "evo1_test_000_018"
     }
-  ]
+  ],
+  "label_source": "v4_manifest.tsv: source FASTA basename -> label (0=Natural, 1=AI)"
 }

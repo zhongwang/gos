@@ -1,14 +1,35 @@
-"""Alphabet-aware preparation and coordinate-safe sequence windows."""
-
+"""Production string preparation and multiscale windows."""
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-from .types import Span
+@dataclass(frozen=True)
+class Span:
+    """A zero-based, half-open interval in the original query."""
+
+    start: int
+    end: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.start, int) or not isinstance(self.end, int):
+            raise TypeError("span coordinates must be integers")
+        if self.start < 0 or self.end < 0:
+            raise ValueError("span coordinates must be non-negative")
+        if self.end < self.start:
+            raise ValueError("span end must be greater than or equal to start")
+
+    @property
+    def length(self) -> int:
+        return self.end - self.start
+
+    def to_dict(self) -> dict[str, int]:
+        return {"start": self.start, "end": self.end}
 
 
 _ACGT_FRAGMENT = re.compile(r"[ACGT]+")
+
+
 _SUPPORTED_POLICIES = frozenset({"split", "reject"})
 
 
@@ -110,84 +131,6 @@ def prepare_sequence(
         scorable_coverage=scorable_bases / len(normalized),
         length=len(normalized),
     )
-
-
-def make_windows(
-    prepared: PreparedSequence, *, size: int = 1000, min_length: int = 500
-) -> tuple[ScoringWindow, ...]:
-    """Return non-overlapping scoreable windows without changing coordinates."""
-
-    if not isinstance(prepared, PreparedSequence):
-        raise TypeError("prepared must be a PreparedSequence")
-    if type(min_length) is not int or min_length < 500:
-        raise ValueError("min_length must be an integer of at least 500")
-    if type(size) is not int or not min_length <= size <= 1000:
-        raise ValueError("size must be an integer between min_length and 1000")
-
-    windows: list[ScoringWindow] = []
-    for fragment in prepared.fragments:
-        for offset in range(0, fragment.length, size):
-            window_length = min(size, fragment.length - offset)
-            if window_length < min_length:
-                continue
-            windows.append(
-                ScoringWindow(
-                    span=Span(fragment.span.start + offset, fragment.span.start + offset + window_length),
-                    sequence=fragment.sequence[offset : offset + window_length],
-                    length_bin=_length_bin(window_length),
-                )
-            )
-    return tuple(windows)
-
-
-def pav_candidate_windows(
-    prepared: PreparedSequence,
-    *,
-    size: int = 1000,
-    stride: int = 500,
-    min_length: int = 500,
-) -> tuple[ScoringWindow, ...]:
-    """Return the deterministic pAV candidates used by training and inference.
-
-    Long fragments use half-overlapping windows plus a terminal window.  The
-    terminal candidate makes every eligible base part of at least one pAV
-    attempt, including a residual shorter than ``min_length`` at the end of a
-    long fragment.  Short eligible fragments are attempted once in full.
-    """
-
-    if not isinstance(prepared, PreparedSequence):
-        raise TypeError("prepared must be a PreparedSequence")
-    if type(min_length) is not int or min_length < 500:
-        raise ValueError("min_length must be an integer of at least 500")
-    if type(size) is not int or not min_length <= size <= 1000:
-        raise ValueError("size must be an integer between min_length and 1000")
-    if type(stride) is not int or not 1 <= stride <= size:
-        raise ValueError("stride must be an integer between 1 and size")
-
-    windows: list[ScoringWindow] = []
-    for fragment in prepared.fragments:
-        if fragment.length < min_length:
-            continue
-        if fragment.length <= size:
-            offsets = [0]
-        else:
-            offsets = list(range(0, fragment.length - size + 1, stride))
-            terminal = fragment.length - size
-            if terminal not in offsets:
-                offsets.append(terminal)
-        for offset in offsets:
-            length = min(size, fragment.length - offset)
-            windows.append(
-                ScoringWindow(
-                    span=Span(
-                        fragment.span.start + offset,
-                        fragment.span.start + offset + length,
-                    ),
-                    sequence=fragment.sequence[offset : offset + length],
-                    length_bin=_length_bin(length),
-                )
-            )
-    return tuple(windows)
 
 
 def make_multiscale_subwindows(
