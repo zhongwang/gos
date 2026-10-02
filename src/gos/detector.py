@@ -7,11 +7,11 @@ import torch
 
 from .decision import DecisionHead, sigmoid
 from .features import extract_cpu_features
-from .student import GenomeOceanStudent
+from .student import DEFAULT_MODEL, GenomeOceanStudent
 
 
 class GOSDetector:
-    def __init__(self, *, model, checkpoint, decision_head=None, device="cpu", dtype="float32"):
+    def __init__(self, *, checkpoint, model=DEFAULT_MODEL, decision_head=None, device="cpu", dtype="float32"):
         self.device = torch.device(device)
         if self.device.type not in {"cpu", "cuda"}:
             raise ValueError("device must be cpu or cuda")

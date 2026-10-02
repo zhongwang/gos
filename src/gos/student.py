@@ -1,50 +1,43 @@
-"""Distilled GenomeOcean-100M v1.2 observer."""
-from pathlib import Path
-
+"""Load the standalone distilled GenomeOcean GOS observer from Hugging Face."""
 import torch
-from torch import nn
 from transformers import AutoModel, AutoTokenizer
 
 
-class GenomeOceanStudent(nn.Module):
-    def __init__(self, snapshot: str | Path):
-        super().__init__()
-        self.backbone = AutoModel.from_pretrained(
-            snapshot, local_files_only=True, trust_remote_code=True,
-            low_cpu_mem_usage=False,
-        )
-        if self.backbone.config.hidden_size != 768:
-            raise ValueError("expected GenomeOcean hidden_size=768")
-        self.head = nn.Linear(768, 1)
+DEFAULT_MODEL = "DOEJGI/GenomeOcean-Sentinel"
+# Pinned to the published weights, tokenizer, and custom modeling code.
+DEFAULT_MODEL_REVISION = "0d91aff1293ad48e71335a6963316a2062c090d5"
 
-    def forward(self, input_ids, attention_mask):
-        hidden = self.backbone(
-            input_ids=input_ids, attention_mask=attention_mask, use_cache=False,
-        )[0]
-        mask = attention_mask.to(dtype=hidden.dtype).unsqueeze(-1)
-        pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
-        return self.head(pooled).squeeze(-1).float()
 
+class GenomeOceanStudent:
     @classmethod
-    def from_checkpoint(cls, snapshot, checkpoint, device):
-        saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
+    def from_checkpoint(cls, model_source, checkpoint, device):
+        """Load standalone HF weights and validate the shipped normalization.
+
+        The retained .pt supplies metadata only; its embedded training paths
+        are never used. An existing standalone snapshot can be used offline.
+        """
+        saved = torch.load(checkpoint, map_location="cpu", weights_only=True, mmap=True)
         if saved.get("schema_version") != "gos-v4-stage2-distillation-benchmark/1":
             raise ValueError("unsupported student checkpoint schema")
         if saved.get("candidate", {}).get("kind") != "genomeocean":
             raise ValueError("checkpoint must contain the GenomeOcean student")
-        model = cls(snapshot)
-        model.load_state_dict(saved["model_state_dict"], strict=True)
-        model.to(device).eval().requires_grad_(False)
-        tokenizer = AutoTokenizer.from_pretrained(
-            snapshot, local_files_only=True, trust_remote_code=True,
-        )
-        tokenizer.pad_token = "[PAD]"
-        if tokenizer.pad_token_id != model.backbone.config.pad_token_id:
-            raise ValueError("tokenizer padding does not match the backbone")
         mean, std = float(saved["target_mean"]), float(saved["target_std"])
         if not torch.isfinite(torch.tensor([mean, std])).all() or std <= 0:
             raise ValueError("invalid observer normalization")
         max_length = int(saved["max_length"])
         if max_length != 200:
             raise ValueError("expected the shipped 200-token student")
+        revision = DEFAULT_MODEL_REVISION if str(model_source) == DEFAULT_MODEL else None
+        model = AutoModel.from_pretrained(
+            model_source, revision=revision, trust_remote_code=True,
+            dtype=torch.float32,
+        )
+        if model.config.hidden_size != 768 or model.config.architectures != ["GOSStudentForObserver"]:
+            raise ValueError("expected the standalone GOS student observer")
+        if (model.config.target_mean, model.config.target_std, model.config.max_length) != (mean, std, max_length):
+            raise ValueError("standalone model normalization does not match checkpoint metadata")
+        model.to(device).eval().requires_grad_(False)
+        tokenizer = AutoTokenizer.from_pretrained(model_source, revision=revision)
+        if tokenizer.pad_token_id != 3 or tokenizer.pad_token_id != model.config.pad_token_id:
+            raise ValueError("tokenizer padding does not match the backbone")
         return model, tokenizer, mean, std, max_length

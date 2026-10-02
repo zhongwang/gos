@@ -16,12 +16,22 @@ are unchanged by the package cleanup (SHA-256
 | target_mean | −0.000002191271897027036 |
 | target_std | 11.3706368339268 |
 
-The base architecture and tokenizer come from `DOEJGI/GenomeOcean-100M-v1.2`,
-revision `2326d7b3d02476cb014a768e9f2de617007385ab`. Pass its local snapshot
-as `--model`; the checkpoint's embedded training-location metadata is ignored.
-`GenomeOceanStudent` loads the base with `local_files_only=True` and
-`trust_remote_code=True`, then strictly loads the shipped state dictionary.
-The tokenizer pads with `[PAD]`. No training or runtime workflow data is needed.
+The complete inference checkpoint is published as
+[DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel),
+revision `0d91aff1293ad48e71335a6963316a2062c090d5`. It contains losslessly
+converted safetensors, Mistral configuration, the tokenizer, and custom
+`GOSStudentForObserver` code. `GenomeOceanStudent.from_checkpoint` loads this
+standalone observer with `AutoModel.from_pretrained(..., trust_remote_code=True)`;
+no base snapshot is consulted. The `.pt` is retained unchanged in LFS for
+provenance and normalization metadata, which are checked against the HF config.
+The checkpoint's embedded training-location metadata is ignored.
+
+The tokenizer pads with `[PAD]`. `--model` optionally selects a local standalone
+snapshot or a compatible Hub repository; the default is the pinned release
+above. A first run downloads the standalone model and tokenizer; cached runs
+can use `HF_HUB_OFFLINE=1`. Only the `.pt`, this README, and `decision_head.json`
+are shipped in this directory. Local legacy config/tokenizer copies are ignored
+and unused. No training or runtime workflow data is needed.
 
 ## Decision head
 

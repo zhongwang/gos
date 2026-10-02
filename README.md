@@ -2,8 +2,10 @@
 
 GenomeOcean-Sentinel (GOS) classifies FASTA records as `AI` or `Natural` using
 47 multiscale CPU features and a **distilled GenomeOcean-100M v1.2 student
-observer**. The trained student checkpoint and production decision weights
-ship in [models/gos_detector/](models/gos_detector/). Sequences are treated as
+observer**. The complete observer is published as
+[DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel).
+The original student checkpoint and production decision weights remain in
+[models/gos_detector/](models/gos_detector/). Sequences are treated as
 input strings; this package performs inference only.
 
 ## Quickstart
@@ -15,21 +17,26 @@ dependencies. Run from the repository root:
 git lfs pull
 python -m pip install -r requirements.txt
 
-# Download the exact base snapshot once; subsequent inference is local-only.
-MODEL=$(python -c 'from huggingface_hub import snapshot_download; print(snapshot_download("DOEJGI/GenomeOcean-100M-v1.2", revision="2326d7b3d02476cb014a768e9f2de617007385ab"))')
-
-python -m src \
+# First run downloads the standalone observer and tokenizer from Hugging Face.
+python -m src.gos.cli \
   --input examples/example.fasta \
-  --model "$MODEL" \
   --checkpoint models/gos_detector/gos_detector_distilled_genomeocean_100m.pt \
   --output examples/example_output.json \
   --device cpu --dtype float32
 ```
 
-`--model` accepts an existing local snapshot directory, so downloading is
-unnecessary if that revision is already available. Inference loads the base
-architecture and tokenizer, then strictly loads all shipped student weights.
-The checkpoint's embedded training path is never used to locate the model.
+The default loader uses `AutoModel.from_pretrained(..., trust_remote_code=True)`
+with the standalone model's complete backbone, mask-mean pooling, and observation
+head. Its tokenizer comes from the same Hub repository. The release is pinned to
+revision `0d91aff1293ad48e71335a6963316a2062c090d5`, including the custom code.
+No base-model snapshot or in-repo config/tokenizer copy is needed.
+The retained `.pt` supplies normalization and maximum-length metadata; inference
+weights come from the standalone model's safetensors.
+
+`--model` (alias `--model-dir`) can select another compatible standalone model
+or a downloaded standalone snapshot directory. After the initial download,
+`HF_HUB_OFFLINE=1` uses the cached standalone release. An uncached offline first
+run requires downloading that release first; the `.pt` alone lacks a tokenizer.
 `--decision-head` optionally selects a decision JSON; the default is
 `decision_head.json` beside the checkpoint. `--batch-size` defaults to 16.
 For the production precision mode, use `--device cuda --dtype bfloat16`.
@@ -92,7 +99,6 @@ manifest and actual output from this CLI.
 from src.gos import GOSDetector
 
 detector = GOSDetector(
-    model="/path/to/local/GenomeOcean-100M-v1.2/snapshot",
     checkpoint="models/gos_detector/gos_detector_distilled_genomeocean_100m.pt",
 )
 result = detector.scan(sequence)  # your input string
@@ -109,5 +115,6 @@ GOS uses the [Lawrence Berkeley National Laboratory Non-Commercial Use Only
 License](LICENSE). Copyright (c) 2026, The Regents of the University of
 California, through Lawrence Berkeley National Laboratory. See [NOTICE](NOTICE)
 for DOE contract attribution and [LICENSE](LICENSE) for the full terms and
-commercial licensing contact. The separately downloaded base model is
-[DOEJGI/GenomeOcean-100M-v1.2](https://huggingface.co/DOEJGI/GenomeOcean-100M-v1.2).
+commercial licensing contact. The standalone Hugging Face release includes
+its complete weights, configuration, tokenizer, custom modeling code, and the
+same LICENSE/NOTICE.

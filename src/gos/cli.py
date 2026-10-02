@@ -8,6 +8,7 @@ import re
 import sys
 
 from .detector import GOSDetector
+from .student import DEFAULT_MODEL
 
 
 def read_fasta(path):
@@ -59,7 +60,11 @@ def positive_int(value):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path, help="FASTA file")
-    parser.add_argument("--model", required=True, type=Path, help="local GenomeOcean-100M v1.2 snapshot")
+    parser.add_argument(
+        "--model", "--model-dir",
+        default=DEFAULT_MODEL,
+        help="standalone Hugging Face model ID or local standalone snapshot directory",
+    )
     parser.add_argument("--checkpoint", type=Path, default=Path(__file__).resolve().parents[2] / "models/gos_detector/gos_detector_distilled_genomeocean_100m.pt")
     parser.add_argument("--decision-head", type=Path, help="defaults to decision_head.json beside checkpoint")
     parser.add_argument("--output", required=True, type=Path)
@@ -71,7 +76,10 @@ def main(argv=None):
         # Prevent accidental replacement of an input or model asset.
         protected = [args.input, args.checkpoint, args.decision_head or args.checkpoint.with_name("decision_head.json")]
         output = args.output.resolve()
-        if any(output == path.resolve() for path in protected) or output.is_relative_to(args.model.resolve()):
+        local_model = Path(args.model)
+        if (any(output == path.resolve() for path in protected)
+                or output.is_relative_to(args.checkpoint.resolve().parent)
+                or (local_model.is_dir() and output.is_relative_to(local_model.resolve()))):
             raise ValueError("output must not overwrite input or model assets")
         detector = GOSDetector(model=args.model, checkpoint=args.checkpoint,
                                decision_head=args.decision_head, device=args.device, dtype=args.dtype)
@@ -96,6 +104,8 @@ def main(argv=None):
             "schema_version": "gos-scan/1",
             "observer": "GenomeOcean-100M v1.2 distilled student",
             "checkpoint": args.checkpoint.name,
+            "model": args.model,
+            "model_revision": getattr(detector.student.config, "_commit_hash", None),
             "threshold_logit": detector.decision.threshold_logit,
             "calibration": detector.decision.calibration,
             "runtime": {"device": str(detector.device), "dtype": args.dtype,

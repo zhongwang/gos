@@ -2,6 +2,8 @@
   "schema_version": "gos-scan/1",
   "observer": "GenomeOcean-100M v1.2 distilled student",
   "checkpoint": "gos_detector_distilled_genomeocean_100m.pt",
+  "model": "DOEJGI/GenomeOcean-Sentinel",
+  "model_revision": "0d91aff1293ad48e71335a6963316a2062c090d5",
   "threshold_logit": -4.535912535032772,
   "calibration": {
     "target_fpr": 0.05,
@@ -19,9 +21,9 @@
     "dtype": "float32",
     "batch_size": 16,
     "python": "3.12.3",
-    "torch": "2.11.0",
+    "torch": "2.10.0+cu126",
     "transformers": "4.56.2",
-    "numpy": "2.3.5"
+    "numpy": "2.4.3"
   },
   "records": [
     {

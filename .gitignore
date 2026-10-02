@@ -36,5 +36,8 @@
 !/models/gos_detector/decision_head.json
 !/models/gos_detector/gos_detector_distilled_genomeocean_100m.pt
 
+# Standalone architecture/tokenizer assets are fetched from Hugging Face.
+# Local copies and release staging files are intentionally not published here.
+
 __pycache__/
 *.py[cod]
