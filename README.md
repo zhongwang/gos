@@ -46,13 +46,31 @@ Each record is labelled `AI`, `natural`, or `inconclusive`.
 
 ### Getting a checkpoint
 
-A trained GOS v4 checkpoint is a directory containing the saved detector
-artifacts (`sequence.joblib`, `cds.joblib`, `router_cpu.joblib`, and, for the
-full detector, `pav/model.joblib` and `router_full.joblib`). Checkpoints are
-published on Hugging Face; see the model card for the download and the exact
-`--model-dir` to use. For a CPU-only run, use a CPU checkpoint. For the full
-detector (with the pAV rescue observer), use a full checkpoint and ensure a
-CUDA device and `transformers` are available.
+The **production GOS v4 detector** ships in this repository at
+`models/gos_detector/gos_detector_distilled_genomeocean_100m.pt` (Git LFS). It
+is a distilled **GenomeOcean-100M v1.2** student observer (116M params,
+saturation epoch 6) that replaces the larger NT-2.5B teacher, so the detector
+runs at high throughput. The checkpoint is a `torch` `state_dict` recording the
+student weights and the detector's calibration scalars (`target_mean`,
+`target_std`, `max_length=200`).
+
+Because it is a distilled student, loading it also needs the base
+**GenomeOcean-100M v1.2** weights (the `GenomeOceanStudent` architecture) —
+available on Hugging Face as [`DOEJGI/GenomeOcean-100M-v1.2`](https://huggingface.co/DOEJGI/GenomeOcean-100M-v1.2).
+
+> **Note:** the current `src/v4` CLI and the saved joblib bundles in this tree were
+> built with the NT-2.5B observer. The GenomeOcean-100M distilled student is the
+> production observer; see [models/gos_detector/README.md](models/gos_detector/README.md)
+> for how to compose a detector from it.
+
+To run the `src/v4` CLI against a saved full checkpoint directory:
+
+```bash
+python -m src.v4.detect \
+  --input examples/example.fasta \
+  --model-dir /path/to/checkpoint \
+  --format json
+```
 
 ## Python API
 

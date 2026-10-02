@@ -22,8 +22,9 @@
 /src/v2/
 /src/v3/
 
-# Model checkpoints — shipped separately on Hugging Face
-/models/
+# Model checkpoints — only the published GOS detector is tracked (LFS).
+# Ignore contents of models/ but re-include the published detector subdir.
+/models/*
 *.pth
 *.pt
 *.ckpt
@@ -33,6 +34,8 @@
 *.hdf5
 *.pkl
 *.joblib
+!/models/gos_detector/
+!/models/gos_detector/*.pt
 
 # Secrets / env — keep only the placeholder example
 .env
