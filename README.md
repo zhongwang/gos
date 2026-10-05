@@ -1,115 +1,129 @@
-# GOS
+# GenomeOcean-Sentinel (GOS)
 
-GenomeOcean-Sentinel (GOS) classifies FASTA records as `AI` or `Natural` using
-47 multiscale CPU features and a **distilled GenomeOcean-100M v1.2 student
-observer**. The complete observer (weights, config, tokenizer, custom modeling
-code) is published as
-[DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel)
-and is the **single source of truth** — no model checkpoint is stored in this repo.
-Sequences are treated as input strings; this package performs inference only.
+GOS classifies DNA sequences in FASTA files as `AI` or `Natural`. Use it to
+assess whether each record appears AI-generated or natural, with an AI score
+and a classification for each sequence. This package runs inference only.
 
 ## Quickstart
 
-Use Python 3.10 or newer and a Python environment with the runtime
-dependencies. Run from the repository root:
+Requires **Python 3.10+** and the dependencies in `requirements.txt`.
+Run from the repository root:
 
 ```bash
 python -m pip install -r requirements.txt
 
-# First run downloads the standalone observer and tokenizer from Hugging Face.
 python -m src.gos.cli \
   --input examples/example.fasta \
   --output examples/example_output.json \
   --device cpu --dtype float32
 ```
 
-The loader uses `AutoModel.from_pretrained(..., trust_remote_code=True)` with the
-standalone model's complete backbone, mask-mean pooling, and observation head.
-Its tokenizer comes from the same Hub repository. The release is pinned to
-revision `7ad672818571cb63f7646539d60414e2d271b90b`, including the custom code.
-No base-model snapshot, in-repo config/tokenizer copy, or checkout of a `.pt`
-file is needed — the normalization scalars, max length, weights, and tokenizer
-all come from the published model.
+The first run downloads the model and tokenizer from
+[DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel),
+the **single source of truth** for the observer. No model checkpoint is stored
+in this repository. The default release is pinned to revision
+`7ad672818571cb63f7646539d60414e2d271b90b`, including its custom modeling code,
+which the loader runs with `trust_remote_code=True`.
 
-`--model` (alias `--model-dir`) can select another compatible standalone model
-or a downloaded standalone snapshot directory. After the initial download,
-`HF_HUB_OFFLINE=1` uses the cached standalone release. `--decision-head`
-optionally selects a decision JSON; the default is
-`models/gos_detector/decision_head.json`. `--batch-size` defaults to 16.
-For the production precision mode, use `--device cuda --dtype bfloat16`.
-CPU float32 is the portable default; device, precision, and dependency versions
-are recorded in output and can affect numerical scores slightly.
+## Usage
+
+Use `--input` to select a FASTA file and `--output` to choose the JSON output
+path. The output directory must already exist; an existing output file is
+replaced.
+
+| Option | Values and default |
+| --- | --- |
+| `--device` | `cpu` (default), `cuda`, or `cuda:N` |
+| `--dtype` | `float32` (default) or `bfloat16`; `bfloat16` requires CUDA |
+| `--batch-size` | Positive integer; default `16` |
+| `--model` / `--model-dir` | Compatible standalone Hugging Face model ID or local snapshot directory; default `DOEJGI/GenomeOcean-Sentinel` |
+| `--decision-head` | Decision JSON path; default `models/gos_detector/decision_head.json` |
+
+For CUDA inference with bfloat16, use `--device cuda --dtype bfloat16`.
+After downloading the default release, set `HF_HUB_OFFLINE=1` to use its cached
+files offline. Device, precision, and dependency versions can slightly change
+scores; the output records these runtime settings.
+
+### Python API
+
+Scan the first record in the example FASTA:
+
+```python
+from src.gos import GOSDetector
+from src.gos.cli import read_fasta
+
+_, sequence, _ = next(read_fasta("examples/example.fasta"))
+detector = GOSDetector()  # loads DOEJGI/GenomeOcean-Sentinel by default
+result = detector.scan(sequence)
+print(result["call"], result["router_confidence"])
+```
 
 ## Decision rule
 
-The CPU extractor preserves the production 500-character windows, 250-character
-stride, terminal-window inclusion, and 47-feature ordering. It casts features
-to float32 before the decision head standardizes them in float64. The original
-3248-feature coefficient vector places this block at **index 3201**, beginning
-with `multiscale_available`; `multiscale_mean_dimer_entropy` is at index 3207.
-The shipped JSON contains exactly the required slices and availability scalar:
+GOS combines **47 CPU features** with a distilled GenomeOcean observer.
+The CPU features summarize eligible fragments across the sequence; the
+observer's tokenized input is truncated to **200 tokens**.
 
 ```text
-base_logit = intercept + ((1 - mean[0]) / scale[0]) * coef[0]
-             + ((cpu_features - mean[3201:]) / scale[3201:]) @ coef[3201:]
-observer_logit = student_head(mask_mean(backbone_hidden)) * target_std + target_mean
 total_logit = base_logit + observer_logit
 router_confidence = sigmoid(total_logit)
 call = AI if total_logit >= threshold_logit else Natural
 ```
 
-The observer uses a Linear(768, 1) head, `[PAD]` padding, and truncation to
-**200 tokens**. CPU features cover all eligible fragments; the observer sees
-the truncated tokenized record.
+The default `threshold_logit` is **-4.535912535032772**, equivalent to an AI
+score threshold of **0.01060348416857509**. This calibration does not guarantee
+a false-positive rate on new datasets.
 
-The default threshold is **−4.535912535032772** in logit space
-(probability **0.01060348416857509**). It was derived with the production
-`threshold_at_fpr` procedure from the stored `global_probability` and `labels`
-arrays, targeting FPR 0.05: 100 of 2000 natural reference records meet the
-inclusive threshold. This reuses the existing production reference calibration;
-it is **not an independent FPR certification for the student or new datasets**.
-See [model documentation](models/gos_detector/README.md) for provenance.
-
-`router_confidence` is the AI score even when the call is `Natural`; it is not
-the probability that the selected label is correct. Calls use the calibrated
-threshold, not 0.5. The package implements the specified binary decision path;
-it does not add a fallback service or an inconclusive routing stage.
+`router_confidence` is the AI score, not the probability that the chosen label
+is correct. Classification uses the threshold above, not 0.5.
 
 ## Inputs and output
 
-The FASTA reader removes formatting whitespace and uppercases record strings.
-CPU preprocessing splits on characters outside its supported four-character
-alphabet and excludes fragments shorter than 500 characters. Records without
-an eligible fragment cause an explicit error; no score is invented. Empty
-records, duplicate IDs, invalid labels, and non-finite scores are rejected.
+The FASTA reader removes formatting whitespace and uppercases sequences.
+CPU preprocessing splits sequences at characters outside `A`, `C`, `G`, and
+`T`, then excludes fragments shorter than **500 bases**. Each record must
+contain at least one eligible fragment. Empty records, duplicate IDs, invalid
+labels, and non-finite scores cause errors.
 
-A header may contain `true_label=0` (Natural) or `true_label=1` (AI). Labels
-are copied to output solely for evaluation and never affect inference; absent
-labels produce `true_label: null`. Each output record includes `call`, numeric
-`prediction`, `router_confidence`, `reason`, and the component logits.
-[The example](examples/README.md) includes labels verified against the source
-manifest and actual output from this CLI.
+Headers may include `true_label=0` (Natural) or `true_label=1` (AI). Labels are
+copied to the output for evaluation and **never affect inference**. Missing
+labels appear as `true_label: null`.
 
-## Python API
+The output JSON includes model, threshold, and runtime metadata, plus a
+`records` array. Each record contains:
 
-```python
-from src.gos import GOSDetector
+| Field | Meaning |
+| --- | --- |
+| `id`, `length` | FASTA ID and sequence length after whitespace removal |
+| `true_label` | Optional input label: `0`, `1`, or `null` |
+| `call`, `prediction` | `Natural` / `0` or `AI` / `1` |
+| `router_confidence` | AI score from the combined logit |
+| `reason` | `total_logit_below_threshold` or `total_logit_at_or_above_threshold` |
+| `base_logit`, `observer_logit`, `total_logit` | CPU contribution, observer contribution, and their sum |
 
-detector = GOSDetector()  # loads DOEJGI/GenomeOcean-Sentinel by default
-result = detector.scan(sequence)  # your input string
-print(result["call"], result["router_confidence"])
+Example record copied from the saved
+[example output](examples/example_output.json), which was generated with an
+earlier model revision:
+
+```json
+{
+  "id": "record_1",
+  "true_label": 0,
+  "length": 1395,
+  "prediction": 0,
+  "call": "Natural",
+  "router_confidence": 3.833126964630078e-09,
+  "reason": "total_logit_below_threshold",
+  "base_logit": -0.13143123665181666,
+  "observer_logit": -19.248153686523438,
+  "total_logit": -19.379584923175255
+}
 ```
 
-## Layout and license
-
-- `src/gos/`: student, CPU features, decision head, detector, and CLI.
-- `models/gos_detector/`: `decision_head.json` (CPU-feature fusion weights) and model docs; no weights.
-- `examples/`: FASTA, verified label manifest, and real inference output.
+## License
 
 GOS uses the [Lawrence Berkeley National Laboratory Non-Commercial Use Only
 License](LICENSE). Copyright (c) 2026, The Regents of the University of
 California, through Lawrence Berkeley National Laboratory. See [NOTICE](NOTICE)
 for DOE contract attribution and [LICENSE](LICENSE) for the full terms and
-commercial licensing contact. The standalone Hugging Face release includes
-its complete weights, configuration, tokenizer, custom modeling code, and the
-same LICENSE/NOTICE.
+commercial licensing contact.
