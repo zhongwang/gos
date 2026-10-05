@@ -101,9 +101,8 @@ The output JSON includes model, threshold, and runtime metadata, plus a
 | `reason` | `total_logit_below_threshold` or `total_logit_at_or_above_threshold` |
 | `base_logit`, `observer_logit`, `total_logit` | CPU contribution, observer contribution, and their sum |
 
-Example record copied from the saved
-[example output](examples/example_output.json), which was generated with an
-earlier model revision:
+Example record pulled from the saved
+[example output](examples/example_output.json), produced by running this CLI:
 
 ```json
 {
