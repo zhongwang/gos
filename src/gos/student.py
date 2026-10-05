@@ -10,23 +10,15 @@ DEFAULT_MODEL_REVISION = "7ad672818571cb63f7646539d60414e2d271b90b"
 
 class GenomeOceanStudent:
     @classmethod
-    def from_checkpoint(cls, model_source, checkpoint, device):
-        """Load standalone HF weights and validate the shipped normalization.
+    def from_checkpoint(cls, model_source, device, checkpoint=None):
+        """Load the standalone HF model and validate the shipped normalization.
 
-        The retained .pt supplies metadata only; its embedded training paths
-        are never used. An existing standalone snapshot can be used offline.
+        The weights, tokenizer, and normalization scalars (``target_mean``,
+        ``target_std``, ``max_length``) all come from the published
+        ``DOEJGI/GenomeOcean-Sentinel`` model — the local ``.pt`` is no longer
+        needed. ``checkpoint`` is accepted for backwards compatibility but is
+        only used to cross-check metadata if supplied.
         """
-        saved = torch.load(checkpoint, map_location="cpu", weights_only=True, mmap=True)
-        if saved.get("schema_version") != "gos-v4-stage2-distillation-benchmark/1":
-            raise ValueError("unsupported student checkpoint schema")
-        if saved.get("candidate", {}).get("kind") != "genomeocean":
-            raise ValueError("checkpoint must contain the GenomeOcean student")
-        mean, std = float(saved["target_mean"]), float(saved["target_std"])
-        if not torch.isfinite(torch.tensor([mean, std])).all() or std <= 0:
-            raise ValueError("invalid observer normalization")
-        max_length = int(saved["max_length"])
-        if max_length != 200:
-            raise ValueError("expected the shipped 200-token student")
         revision = DEFAULT_MODEL_REVISION if str(model_source) == DEFAULT_MODEL else None
         model = AutoModel.from_pretrained(
             model_source, revision=revision, trust_remote_code=True,
@@ -34,8 +26,17 @@ class GenomeOceanStudent:
         )
         if model.config.hidden_size != 768 or model.config.architectures != ["GOSStudentForObserver"]:
             raise ValueError("expected the standalone GOS student observer")
-        if (model.config.target_mean, model.config.target_std, model.config.max_length) != (mean, std, max_length):
-            raise ValueError("standalone model normalization does not match checkpoint metadata")
+        mean = float(model.config.target_mean)
+        std = float(model.config.target_std)
+        max_length = int(model.config.max_length)
+        if not torch.isfinite(torch.tensor([mean, std])).all() or std <= 0:
+            raise ValueError("invalid observer normalization")
+        if max_length != 200:
+            raise ValueError("expected the shipped 200-token student")
+        if checkpoint is not None:
+            saved = torch.load(checkpoint, map_location="cpu", weights_only=True, mmap=True)
+            if (float(saved["target_mean"]), float(saved["target_std"]), int(saved["max_length"])) != (mean, std, max_length):
+                raise ValueError("old checkpoint metadata does not match the standalone model")
         model.to(device).eval().requires_grad_(False)
         tokenizer = AutoTokenizer.from_pretrained(model_source, revision=revision)
         if tokenizer.pad_token_id != 3 or tokenizer.pad_token_id != model.config.pad_token_id:

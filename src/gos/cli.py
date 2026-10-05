@@ -65,8 +65,9 @@ def main(argv=None):
         default=DEFAULT_MODEL,
         help="standalone Hugging Face model ID or local standalone snapshot directory",
     )
-    parser.add_argument("--checkpoint", type=Path, default=Path(__file__).resolve().parents[2] / "models/gos_detector/gos_detector_distilled_genomeocean_100m.pt")
-    parser.add_argument("--decision-head", type=Path, help="defaults to decision_head.json beside checkpoint")
+    parser.add_argument("--checkpoint", type=Path, default=None,
+                        help="optional legacy .pt for metadata cross-check (model weights now come from the HF model)")
+    parser.add_argument("--decision-head", type=Path, help="defaults to models/gos_detector/decision_head.json")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--device", default="cpu", help="cpu, cuda, or cuda:N")
     parser.add_argument("--dtype", choices=("float32", "bfloat16"), default="float32")
@@ -74,12 +75,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         # Prevent accidental replacement of an input or model asset.
-        protected = [args.input, args.checkpoint, args.decision_head or args.checkpoint.with_name("decision_head.json")]
+        protected = [args.input, args.decision_head]
+        if args.checkpoint is not None:
+            protected.append(args.checkpoint)
         output = args.output.resolve()
         local_model = Path(args.model)
-        if (any(output == path.resolve() for path in protected)
-                or output.is_relative_to(args.checkpoint.resolve().parent)
-                or (local_model.is_dir() and output.is_relative_to(local_model.resolve()))):
+        if (any(output == path.resolve() for path in protected if path is not None)
+                or output.is_relative_to(local_model.resolve()) if local_model.is_dir() else False):
             raise ValueError("output must not overwrite input or model assets")
         detector = GOSDetector(model=args.model, checkpoint=args.checkpoint,
                                decision_head=args.decision_head, device=args.device, dtype=args.dtype)
@@ -103,7 +105,7 @@ def main(argv=None):
         payload = {
             "schema_version": "gos-scan/1",
             "observer": "GenomeOcean-100M v1.2 distilled student",
-            "checkpoint": args.checkpoint.name,
+            "weights": "hf:" + str(args.model),
             "model": args.model,
             "model_revision": getattr(detector.student.config, "_commit_hash", None),
             "threshold_logit": detector.decision.threshold_logit,

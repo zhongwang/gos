@@ -1,37 +1,36 @@
 # GOS detector assets
 
-`gos_detector_distilled_genomeocean_100m.pt` is the shipped distilled
-**GenomeOcean-100M v1.2** student checkpoint, tracked with Git LFS. Its weights
-are unchanged by the package cleanup (SHA-256
-`74b4087d09` is the prefix of its LFS object ID).
+The complete distilled **GenomeOcean-100M v1.2** student observer is published
+as [DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel),
+revision `7ad672818571cb63f7646539d60414e2d271b90b`, and is the **single source
+of truth** for the model weights, tokenizer, and metadata. No checkpoint is
+stored in this git repository.
+
+The original `.pt` file that the standalone release was built from (SHA-256
+prefix `74b4087d09`, 116,411,905 parameters, schema
+`gos-v4-stage2-distillation-benchmark/1`, candidate
+`genomeocean_100m_v12_saturation`, selected epoch 6) is preserved for provenance
+in the gitignored `models_archive/` directory next to this repo; it is not
+tracked and not required at runtime.
 
 | Property | Value |
 | --- | --- |
-| Checkpoint schema | `gos-v4-stage2-distillation-benchmark/1` |
-| Candidate | `genomeocean_100m_v12_saturation` |
+| Standalone model | `DOEJGI/GenomeOcean-Sentinel` |
+| Pinned revision | `7ad672818571cb63f7646539d60414e2d271b90b` |
+| Architecture | `GOSStudentForObserver` (Mistral encoder + head) |
 | Parameter count | 116,411,905 |
-| Selected epoch | 6 |
 | Head | Linear(768, 1), after attention-mask mean pooling |
 | Maximum tokens | 200 |
 | target_mean | −0.000002191271897027036 |
 | target_std | 11.3706368339268 |
 
-The complete inference checkpoint is published as
-[DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel),
-revision `0d91aff1293ad48e71335a6963316a2062c090d5`. It contains losslessly
-converted safetensors, Mistral configuration, the tokenizer, and custom
-`GOSStudentForObserver` code. `GenomeOceanStudent.from_checkpoint` loads this
-standalone observer with `AutoModel.from_pretrained(..., trust_remote_code=True)`;
-no base snapshot is consulted. The `.pt` is retained unchanged in LFS for
-provenance and normalization metadata, which are checked against the HF config.
-The checkpoint's embedded training-location metadata is ignored.
-
-The tokenizer pads with `[PAD]`. `--model` optionally selects a local standalone
-snapshot or a compatible Hub repository; the default is the pinned release
-above. A first run downloads the standalone model and tokenizer; cached runs
-can use `HF_HUB_OFFLINE=1`. Only the `.pt`, this README, and `decision_head.json`
-are shipped in this directory. Local legacy config/tokenizer copies are ignored
-and unused. No training or runtime workflow data is needed.
+`GenomeOceanStudent.from_checkpoint` loads this standalone observer with
+`AutoModel.from_pretrained(..., trust_remote_code=True)`; the normalization
+scalars and max length come from the published `config.json`, so no base
+snapshot or in-repo `.pt` is consulted. `--model` optionally selects a local
+standalone snapshot or a compatible Hub repository; the default is the pinned
+release above. A first run downloads the standalone model and tokenizer; cached
+runs can use `HF_HUB_OFFLINE=1`.
 
 ## Decision head
 

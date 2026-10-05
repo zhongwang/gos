@@ -11,7 +11,7 @@ from .student import DEFAULT_MODEL, GenomeOceanStudent
 
 
 class GOSDetector:
-    def __init__(self, *, checkpoint, model=DEFAULT_MODEL, decision_head=None, device="cpu", dtype="float32"):
+    def __init__(self, *, model=DEFAULT_MODEL, decision_head=None, device="cpu", dtype="float32", checkpoint=None):
         self.device = torch.device(device)
         if self.device.type not in {"cpu", "cuda"}:
             raise ValueError("device must be cpu or cuda")
@@ -23,10 +23,15 @@ class GOSDetector:
             raise ValueError("bfloat16 inference requires CUDA; use float32 on CPU")
         self.dtype = dtype
         torch.set_float32_matmul_precision("high")
-        decision_head = decision_head or Path(checkpoint).with_name("decision_head.json")
+        if decision_head is None:
+            decision_head = Path(__file__).resolve().parents[2] / "models/gos_detector/decision_head.json"
+            if not decision_head.is_file():
+                raise ValueError(
+                    "decision_head.json not found next to the package; pass --decision-head explicitly"
+                )
         self.decision = DecisionHead(decision_head)
         (self.student, self.tokenizer, self.target_mean, self.target_std,
-         self.max_length) = GenomeOceanStudent.from_checkpoint(model, checkpoint, self.device)
+         self.max_length) = GenomeOceanStudent.from_checkpoint(model, self.device, checkpoint=checkpoint)
 
     def scan_batch(self, sequences: list[str]) -> list[dict]:
         if not sequences:

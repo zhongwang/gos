@@ -1,1 +1,2 @@
-models/gos_detector/*.pt filter=lfs diff=lfs merge=lfs -text
+# No model checkpoints in git — weights come from the standalone HF model
+# at https://huggingface.co/DOEJGI/GenomeOcean-Sentinel.

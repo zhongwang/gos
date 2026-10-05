@@ -2,43 +2,40 @@
 
 GenomeOcean-Sentinel (GOS) classifies FASTA records as `AI` or `Natural` using
 47 multiscale CPU features and a **distilled GenomeOcean-100M v1.2 student
-observer**. The complete observer is published as
-[DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel).
-The original student checkpoint and production decision weights remain in
-[models/gos_detector/](models/gos_detector/). Sequences are treated as
-input strings; this package performs inference only.
+observer**. The complete observer (weights, config, tokenizer, custom modeling
+code) is published as
+[DOEJGI/GenomeOcean-Sentinel](https://huggingface.co/DOEJGI/GenomeOcean-Sentinel)
+and is the **single source of truth** — no model checkpoint is stored in this repo.
+Sequences are treated as input strings; this package performs inference only.
 
 ## Quickstart
 
-Use Python 3.10 or newer, Git LFS, and a Python environment with the runtime
+Use Python 3.10 or newer and a Python environment with the runtime
 dependencies. Run from the repository root:
 
 ```bash
-git lfs pull
 python -m pip install -r requirements.txt
 
 # First run downloads the standalone observer and tokenizer from Hugging Face.
 python -m src.gos.cli \
   --input examples/example.fasta \
-  --checkpoint models/gos_detector/gos_detector_distilled_genomeocean_100m.pt \
   --output examples/example_output.json \
   --device cpu --dtype float32
 ```
 
-The default loader uses `AutoModel.from_pretrained(..., trust_remote_code=True)`
-with the standalone model's complete backbone, mask-mean pooling, and observation
-head. Its tokenizer comes from the same Hub repository. The release is pinned to
-revision `0d91aff1293ad48e71335a6963316a2062c090d5`, including the custom code.
-No base-model snapshot or in-repo config/tokenizer copy is needed.
-The retained `.pt` supplies normalization and maximum-length metadata; inference
-weights come from the standalone model's safetensors.
+The loader uses `AutoModel.from_pretrained(..., trust_remote_code=True)` with the
+standalone model's complete backbone, mask-mean pooling, and observation head.
+Its tokenizer comes from the same Hub repository. The release is pinned to
+revision `7ad672818571cb63f7646539d60414e2d271b90b`, including the custom code.
+No base-model snapshot, in-repo config/tokenizer copy, or checkout of a `.pt`
+file is needed — the normalization scalars, max length, weights, and tokenizer
+all come from the published model.
 
 `--model` (alias `--model-dir`) can select another compatible standalone model
 or a downloaded standalone snapshot directory. After the initial download,
-`HF_HUB_OFFLINE=1` uses the cached standalone release. An uncached offline first
-run requires downloading that release first; the `.pt` alone lacks a tokenizer.
-`--decision-head` optionally selects a decision JSON; the default is
-`decision_head.json` beside the checkpoint. `--batch-size` defaults to 16.
+`HF_HUB_OFFLINE=1` uses the cached standalone release. `--decision-head`
+optionally selects a decision JSON; the default is
+`models/gos_detector/decision_head.json`. `--batch-size` defaults to 16.
 For the production precision mode, use `--device cuda --dtype bfloat16`.
 CPU float32 is the portable default; device, precision, and dependency versions
 are recorded in output and can affect numerical scores slightly.
@@ -98,9 +95,7 @@ manifest and actual output from this CLI.
 ```python
 from src.gos import GOSDetector
 
-detector = GOSDetector(
-    checkpoint="models/gos_detector/gos_detector_distilled_genomeocean_100m.pt",
-)
+detector = GOSDetector()  # loads DOEJGI/GenomeOcean-Sentinel by default
 result = detector.scan(sequence)  # your input string
 print(result["call"], result["router_confidence"])
 ```
@@ -108,7 +103,7 @@ print(result["call"], result["router_confidence"])
 ## Layout and license
 
 - `src/gos/`: student, CPU features, decision head, detector, and CLI.
-- `models/gos_detector/`: existing LFS checkpoint and small decision-weight JSON.
+- `models/gos_detector/`: `decision_head.json` (CPU-feature fusion weights) and model docs; no weights.
 - `examples/`: FASTA, verified label manifest, and real inference output.
 
 GOS uses the [Lawrence Berkeley National Laboratory Non-Commercial Use Only
